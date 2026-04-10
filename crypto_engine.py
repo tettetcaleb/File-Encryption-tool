@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
 
-# ── Constants ────────────────────────────────────────────────────────────────
+#  Constants
 
 SALT_SIZE   = 16   # bytes  — random per file, stored in output
 IV_SIZE     = 12   # bytes  — GCM nonce, random per file, stored in output
@@ -29,7 +29,7 @@ KEY_SIZE    = 32   # bytes  — 256-bit AES key
 KDF_ITERS   = 600_000  # PBKDF2 iterations (NIST SP 800-132 recommendation, 2023)
 
 
-# ── Key derivation ────────────────────────────────────────────────────────────
+#  Key derivation 
 
 def derive_key(password: str, salt: bytes) -> bytes:
     """
@@ -55,7 +55,7 @@ def derive_key(password: str, salt: bytes) -> bytes:
     return kdf.derive(password.encode("utf-8"))
 
 
-# ── Encrypt ───────────────────────────────────────────────────────────────────
+#  Encrypt
 
 def encrypt_bytes(plaintext: bytes, password: str) -> bytes:
     """
@@ -88,7 +88,7 @@ def encrypt_bytes(plaintext: bytes, password: str) -> bytes:
     return salt + iv + ciphertext
 
 
-# ── Decrypt ───────────────────────────────────────────────────────────────────
+# ─
 
 def decrypt_bytes(blob: bytes, password: str) -> bytes:
     """
@@ -129,8 +129,7 @@ def decrypt_bytes(blob: bytes, password: str) -> bytes:
     return aesgcm.decrypt(iv, ciphertext, None)
 
 
-# ── File helpers ──────────────────────────────────────────────────────────────
-
+#  File helpers 
 def encrypt_file(input_path: str, output_path: str, password: str) -> None:
     """
     Read a file, encrypt its contents, and write the encrypted blob to disk.
@@ -171,7 +170,7 @@ def decrypt_file(input_path: str, output_path: str, password: str) -> None:
         f.write(plaintext)
 
 
-# ── Quick self-test (run this file directly to verify the engine works) ───────
+
 
 if __name__ == "__main__":
     import sys
