@@ -55,3 +55,84 @@ Running crypto_engine self-test...
   Randomness check          : PASS — each encryption is unique
 
 All tests passed.
+
+
+# Step 2 — CLI interface
+
+## Usage
+
+Always run from inside your project folder using the venv Python:
+
+### Encrypt a file
+```powershell
+venv\Scripts\python.exe encrypt_tool.py --encrypt --input myfile.pdf --output myfile.pdf.enc
+```
+
+### Decrypt a file
+```powershell
+venv\Scripts\python.exe encrypt_tool.py --decrypt --input myfile.pdf.enc --output myfile.pdf
+```
+
+### See all options
+```powershell
+venv\Scripts\python.exe encrypt_tool.py --help
+```
+
+---
+
+## What happens when you encrypt
+
+1. You provide `--input` and `--output` paths
+2. Tool prompts for a password (hidden — nothing shows on screen)
+3. Tool asks you to confirm the password
+4. File is encrypted and saved
+5. You see input/output sizes and time taken
+
+## What happens when you decrypt
+
+1. You provide `--input` and `--output` paths
+2. Tool prompts for the password
+3. If the password is correct → file is decrypted and saved
+4. If the password is wrong → error message, no output file left behind
+
+---
+
+## Flags reference
+
+| Flag | Required | Description |
+|---|---|---|
+| `--encrypt` | one of these two | Encrypt mode |
+| `--decrypt` | one of these two | Decrypt mode |
+| `--input FILE` | yes | Path to the file to read |
+| `--output FILE` | yes | Path to write the result |
+
+---
+
+## Example session
+
+```
+PS C:\Users\tette\OneDrive\Desktop\Fle_encryption>
+venv\Scripts\python.exe encrypt_tool.py --encrypt --input secret.pdf --output secret.pdf.enc
+
+  Encrypting: secret.pdf
+  Output    : secret.pdf.enc
+
+  Enter password    :
+  Confirm password  :
+
+  Done in 0.43s
+  Input size : 2.1 MB
+  Output size: 2.1 MB
+
+  File encrypted successfully.
+```
+
+---
+
+## What's next
+
+| Step | What we'll add |
+|---|---|
+| Step 3 | Custom `.enc` file format with a magic header and version byte |
+| Step 4 | Better error handling — distinguish wrong password vs. corrupted file |
+| Step 5 | Full test suite and packaging so the tool installs globally |
