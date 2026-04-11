@@ -1,258 +1,115 @@
 # File Encryption Tool
 
-I built this because I wanted a simple way to encrypt any file with a password — no apps, no accounts, just a command and a password and your file is locked. It uses AES-256, which is the same encryption standard used by banks and governments, so it's not a toy.
-
-The whole thing is written in Python and runs from the terminal.
+A command-line tool that encrypts and decrypts any file using AES-256 and a password. Built in Python.
 
 ---
 
-## What it can do
-
-- Encrypt any file — PDFs, images, videos, zip files, whatever
-- Decrypt it back with the same password
-- Reject wrong passwords immediately with a clean error message
-- Detect if a file has been tampered with
-- Handle every failure gracefully — no Python tracebacks, just plain English errors
-
----
-
-## How to install the one dependency
+## Install the dependency
 
 ```powershell
 venv\Scripts\pip.exe install cryptography
 ```
 
-That's the only external package. Everything else is standard Python.
-
 ---
 
 ## How to use it
 
-**Encrypt a file:**
+Encrypt a file:
 ```powershell
 venv\Scripts\python.exe encrypt_tool.py --encrypt --input myfile.pdf --output myfile.enc
 ```
 
-**Decrypt a file:**
+Decrypt it back:
 ```powershell
 venv\Scripts\python.exe encrypt_tool.py --decrypt --input myfile.enc --output myfile.pdf
 ```
 
-It'll ask for your password when you run it. Nothing shows on screen while you type — that's normal.
+It'll ask for your password when you run it. On encrypt it asks twice so you don't lock yourself out with a typo.
 
-When encrypting it asks you to confirm the password so you don't lock yourself out with a typo.
-
----
-
-## Important — always use the venv Python
-
-Never use the VS Code play button or just type `python`. Always use `venv\Scripts\python.exe` in the terminal. The play button points to the system Python which doesn't have the `cryptography` package.
+> Always run with `venv\Scripts\python.exe`, not the VS Code play button. The play button uses the wrong Python.
 
 ---
 
-## How the project is structured
+## How the code is split up
 
-I split everything into four files so each one does exactly one job.
+I gave each file one job so nothing gets tangled together.
 
-```
-Fle_encryption\
-├── crypto_engine.py    ← the raw AES-256 math
-├── file_format.py      ← adds a header to encrypted files so we can identify them
-├── errors.py           ← catches every failure and explains it in plain English
-├── encrypt_tool.py     ← the CLI you actually type into
-└── venv\               ← virtual environment (cryptography lives here)
-```
+- `crypto_engine.py` — the actual AES-256 encryption and decryption
+- `file_format.py` — adds a header to encrypted files so we can identify them later
+- `errors.py` — catches every failure and explains it in plain English
+- `encrypt_tool.py` — the CLI that ties everything together
 
 ---
 
-## Step 1 — The core encryption engine (`crypto_engine.py`)
+## Step 1 — crypto_engine.py
 
-This is where the actual cryptography happens. No CLI, no file format, no UI — just the function that takes bytes in and spits encrypted bytes out.
+This is where the cryptography happens. Password comes in, encrypted bytes come out.
 
-**Why AES-256-GCM?**
+I used AES-256-GCM because the GCM mode does two things at once  it encrypts the file and it authenticates it. That means if someone tampers with the file, or you type the wrong password, decryption fails immediately instead of silently returning garbage.
 
-AES-256 is the standard. The GCM part means the encryption is authenticated — decryption doesn't just decrypt, it also checks that the file hasn't been changed since it was encrypted. If someone flips a single bit in your file, or you type the wrong password, you get an error immediately instead of garbage output.
+Passwords go through PBKDF2 with 600,000 rounds of SHA-256 before becoming a key. That's slow enough to make brute forcing impractical but still under a second for the real user. The 600k number is from NIST's 2023 recommendation.
 
-**Why PBKDF2 with 600,000 iterations?**
+Every encryption also generates a fresh random salt (16 bytes) and IV (12 bytes). This means encrypting the same file twice with the same password produces completely different output each time.
 
-Your password is something a human can remember, which means it's too short to use directly as a crypto key. PBKDF2 runs your password through SHA-256 hashing 600,000 times to stretch it into a proper key. A correct password derives the key in under a second. An attacker brute-forcing it has to do 600,000× more work per guess. This number is from NIST's 2023 recommendation.
-
-**Why a random salt?**
-
-16 random bytes generated fresh every time you encrypt something. It means two files encrypted with the same password get completely different keys, so an attacker can't attack both at once. The salt isn't secret — it's stored at the start of the output.
-
-**Why a random IV?**
-
-Without a random IV, encrypting the same file twice with the same password would produce identical output, which leaks information. The IV (12 bytes, the recommended GCM size) makes every encryption unique. Also stored in the output, also not secret.
-
-**What the output looks like:**
-
-```
-[ 16 bytes ] salt        — mixed into key derivation
-[ 12 bytes ] IV          — makes each encryption unique
-[ N+16 bytes] ciphertext — your data + 16-byte GCM auth tag
-
-Total overhead: 44 bytes per file
-```
-
-**Run the self-test:**
-
+Run the self-test:
 ```powershell
 venv\Scripts\python.exe crypto_engine.py
 ```
 
-```
-Running crypto_engine self-test...
+---
 
-  Original size :     3300 bytes
-  Encrypted size:     3344 bytes  (+44 bytes overhead)
-  Decrypt (correct password): PASS
-  Decrypt (wrong password)  : PASS — correctly rejected
-  Randomness check          : PASS — each encryption is unique
+## Step 2 — encrypt_tool.py
 
-All tests passed.
-```
+Wraps the crypto in a CLI. Handles the password prompt, the overwrite warning, and shows you the file sizes and time when it's done.
 
 ---
 
-## Step 2 — The CLI (`encrypt_tool.py`)
+## Step 3 — file_format.py
 
-With the crypto working I wrapped it in a proper command-line interface. You pass it flags, it does the work.
+Before this, the encrypted output was just raw bytes with no way to tell if it was actually one of our files. Trying to decrypt the wrong file would crash with a confusing Python error.
 
-**Flags:**
-
-| Flag | What it does |
-|---|---|
-| `--encrypt` | Encrypt mode |
-| `--decrypt` | Decrypt mode |
-| `--input FILE` | File to read |
-| `--output FILE` | Where to write the result |
-
-**What happens when you encrypt:**
-
-1. You pass `--input` and `--output`
-2. It prompts for a password (hidden)
-3. It asks you to confirm the password
-4. File gets encrypted and saved
-5. You see the sizes and time taken
-
-**What happens when you decrypt:**
-
-1. You pass `--input` and `--output`
-2. It prompts for the password
-3. Correct password → file gets decrypted
-4. Wrong password → clean error, no output file left behind
-
----
-
-## Step 3 — File format (`file_format.py`)
-
-Before this, encrypted output was just a blob of random-looking bytes. There was no way to tell if it was one of our files or random garbage. If you tried to decrypt the wrong file it would crash with a confusing Python error.
-
-So I added a 33-byte header to the start of every `.enc` file that acts like an ID card.
-
-**What's inside every `.enc` file:**
+Now every `.enc` file starts with a 33-byte header:
 
 ```
-[ 4 bytes ] Magic: "AES\x00"  — proves this is our file
-[ 1 byte  ] Version: 1        — which version of the format
-[ 16 bytes] Salt              — for key derivation
-[ 12 bytes] IV                — for encryption
-[ the rest] Ciphertext        — your data + 16-byte GCM tag
-
-Total overhead: 49 bytes
+4 bytes  — magic "AES\x00" so we know it's our file
+1 byte   — version number (currently 1)
+16 bytes — salt
+12 bytes — IV
+the rest — encrypted data + 16-byte auth tag
 ```
 
-The magic bytes let the tool immediately tell if you gave it a valid file. If they're not there it says "this isn't a valid .enc file" right away instead of doing work and then crashing.
+Total overhead added to your file: 49 bytes.
 
-The version byte means if the format ever changes in the future, old files still say `1` and the tool can handle both without getting confused.
-
-**Run the self-test:**
-
+Run the self-test:
 ```powershell
 venv\Scripts\python.exe file_format.py
 ```
 
-```
-Running file_format self-test...
-
-  Original size  : 3400 bytes
-  Encrypted size : 3449 bytes
-  Header overhead: 33 bytes (magic + version + salt + IV)
-  GCM tag        : 16 bytes
-  Total overhead : 49 bytes
-
-  Magic bytes check : PASS
-  Version byte check: PASS
-  Roundtrip decrypt : PASS
-  Bad magic rejected: PASS
-
-All tests passed.
-```
-
 ---
 
-## Step 4 — Error handling (`errors.py`)
+## Step 4 — errors.py
 
-Before this step, if anything went wrong you'd get a Python traceback like:
+Before this, anything going wrong meant a Python traceback. Now every failure gives you one clean line explaining what happened and the partial output file gets cleaned up automatically so you're never left with broken files on disk.
 
-```
-Traceback (most recent call last):
-  File "encrypt_tool.py", line 61, in run_decrypt
-cryptography.exceptions.InvalidTag
-```
+Errors it handles: wrong password, file not found, not a valid .enc file, file corrupted, permission denied, disk full.
 
-Useless. So I wrote `errors.py` to catch every failure and translate it into plain English.
-
-Now you get this:
-
-```
-  ERROR: Wrong password, or the file has been tampered with. Nothing was written.
-```
-
-**Every error that's handled:**
-
-- **Wrong password** — told immediately, any partial output file gets deleted automatically
-- **File not found** — if you mistyped the path or the file moved
-- **Not a valid .enc file** — catches bad magic bytes, explains what happened
-- **File too small / corrupted** — detects if the file got cut off or damaged
-- **Permission denied** — if you don't have access to that location
-- **Disk full** — partial file gets cleaned up automatically
-
-The cleanup part matters. If something goes wrong during decryption, the partial output file gets deleted. You're never left with a half-decrypted file on disk that looks complete but isn't.
-
-**Run the self-test:**
-
+Run the self-test:
 ```powershell
 venv\Scripts\python.exe errors.py
 ```
 
-```
-Running errors self-test...
-
-  Correct password decrypts successfully : PASS
-  Wrong password caught                  : PASS
-  Missing file caught                    : PASS
-  Bad file format caught                 : PASS
-
-4/4 tests passed.
-```
-
 ---
 
-## Quick reference
+## Step 5 — tests and packaging
 
-| What I want to do | Command |
-|---|---|
-| Encrypt a file | `venv\Scripts\python.exe encrypt_tool.py --encrypt --input file.pdf --output file.enc` |
-| Decrypt a file | `venv\Scripts\python.exe encrypt_tool.py --decrypt --input file.enc --output file.pdf` |
-| Test crypto engine | `venv\Scripts\python.exe crypto_engine.py` |
-| Test file format | `venv\Scripts\python.exe file_format.py` |
-| Test error handling | `venv\Scripts\python.exe errors.py` |
-| Install dependency | `venv\Scripts\pip.exe install cryptography` |
+A full test suite that runs all four modules together automatically, plus a `pyproject.toml` so you can install the tool globally and just type `encrypt` from anywhere instead of the full venv path every time.
 
----
+Install it globally:
+```powershell
+venv\Scripts\pip.exe install -e .
+```
 
-## What's coming in Step 5
-
-Step 5 is the finish line — a full test suite that runs all four modules together automatically, plus packaging so you can install the tool globally and just type `encrypt` from anywhere instead of the full `venv\Scripts\python.exe` path every time.
+Run all tests:
+```powershell
+venv\Scripts\python.exe -m pytest tests/
+```
